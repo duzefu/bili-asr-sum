@@ -1,7 +1,7 @@
 import asyncio
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 @dataclass
@@ -13,8 +13,8 @@ class TaskRecord:
     transcript_source: str | None = None
     summary: str | None = None
     error: str | None = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class TaskManager:
@@ -39,7 +39,7 @@ class TaskManager:
                 return
             for key, value in kwargs.items():
                 setattr(task, key, value)
-            task.updated_at = datetime.utcnow()
+            task.updated_at = datetime.now(timezone.utc)
 
 
 task_manager = TaskManager()
