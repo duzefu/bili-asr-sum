@@ -79,6 +79,7 @@ class TestPipelineASRPath:
         assert result.transcript_source == "asr"
         assert result.title == "音频视频标题"
         assert result.summary == "ASR 总结内容"
+        mock_asr_provider.transcribe.assert_called_once_with(audio_file)
 
     async def test_status_transitions_through_transcribing(
         self, tm: TaskManager, mocker, tmp_path: Path, mock_asr_provider

@@ -1,8 +1,6 @@
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.models import SummarizeRequest, SubmitResponse, TaskResponse
@@ -23,9 +21,6 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
-
-# 挂载临时音频目录，供 ASR API 公网抓取
-app.mount("/internal/audio", StaticFiles(directory=str(settings.temp_dir)), name="audio")
 
 
 @app.post(

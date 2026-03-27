@@ -19,9 +19,6 @@ class Settings(BaseSettings):
     # DeepSeek
     deepseek_api_key: str = ""
 
-    # 公网地址（ASR API 抓取音频用）
-    server_base_url: str = "http://localhost:8000"
-
     # 临时文件目录
     temp_dir: Path = Path("temp")
 

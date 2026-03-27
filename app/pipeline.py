@@ -32,9 +32,8 @@ async def run_pipeline(task_id: str, url: str) -> None:
             audio_path, title = await download_audio(url, settings.temp_dir, task_id)
             await task_manager.update(task_id, status="transcribing", title=title)
 
-            audio_url = f"{settings.server_base_url.rstrip('/')}/internal/audio/{audio_path.name}"
             asr_provider = get_asr_provider(settings)
-            transcript = await asr_provider.transcribe(audio_url)
+            transcript = await asr_provider.transcribe(audio_path)
             transcript_source = "asr"
             await task_manager.update(task_id, transcript_source=transcript_source)
 

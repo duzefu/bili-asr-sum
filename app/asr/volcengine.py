@@ -1,4 +1,7 @@
 import asyncio
+import base64
+from pathlib import Path
+
 import httpx
 
 from app.asr.base import ASRProvider
@@ -10,6 +13,7 @@ _QUERY_URL = "https://openspeech.bytedance.com/api/v1/auc/query"
 class VolcengineASR(ASRProvider):
     """
     火山引擎豆包语音识别（录音文件识别标准版）。
+    通过 base64 编码直接传输音频数据，无需公网 URL。
     文档：https://www.volcengine.com/docs/6561/80820
     音频要求：mp3/wav/ogg，采样率 16000Hz
     """
@@ -27,19 +31,20 @@ class VolcengineASR(ASRProvider):
             "Resource-Id": "volc.sauc.offline",
         }
 
-    async def transcribe(self, audio_url: str) -> str:
-        task_id = await self._submit(audio_url)
+    async def transcribe(self, audio_path: Path) -> str:
+        task_id = await self._submit(audio_path)
         return await self._poll(task_id)
 
-    async def _submit(self, audio_url: str) -> str:
+    async def _submit(self, audio_path: Path) -> str:
+        audio_data = base64.b64encode(audio_path.read_bytes()).decode()
         payload = {
             "appid": self._app_id,
             "language": "zh-CN",
             "audio_format": "mp3",
-            "audio_url": audio_url,
+            "audio_data": audio_data,
             "enable_punctuation": True,
         }
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(_SUBMIT_URL, json=payload, headers=self._headers)
             resp.raise_for_status()
             data = resp.json()
@@ -47,7 +52,6 @@ class VolcengineASR(ASRProvider):
         if data.get("code") != 0 and data.get("resp", {}).get("code") != 0:
             raise RuntimeError(f"火山引擎 ASR 提交失败: {data}")
 
-        # 兼容不同响应格式
         task_id = (
             data.get("id") or
             data.get("task_id") or
@@ -78,11 +82,9 @@ class VolcengineASR(ASRProvider):
                 await asyncio.sleep(5)
 
     def _extract_text(self, data: dict) -> str:
-        # 提取识别文本
         utterances = data.get("utterances", [])
         if utterances:
             return "\n".join(u.get("text", "") for u in utterances if u.get("text"))
 
-        # fallback
         text = data.get("text", "") or data.get("result", {}).get("text", "")
         return text

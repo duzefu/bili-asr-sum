@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 
 class ASRProvider(ABC):
     @abstractmethod
-    async def transcribe(self, audio_url: str) -> str:
+    async def transcribe(self, audio_path: Path) -> str:
         """
-        提交音频文件 URL 进行识别，轮询直到完成，返回转录文本。
-        audio_url 必须是 ASR 服务可公网访问的 HTTP/HTTPS URL。
+        接收本地音频文件路径，返回转录文本。
         """
         ...
