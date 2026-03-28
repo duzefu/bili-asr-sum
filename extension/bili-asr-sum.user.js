@@ -238,14 +238,35 @@
         },
 
         formatSummary(summary) {
-            // 简单的 Markdown 转 HTML
-            return summary
-                .replace(/\n\n/g, '</p><p>')
-                .replace(/\n/g, '<br>')
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                .replace(/^- (.+)$/gm, '<li>$1</li>')
-                .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+            // 按行处理，逐行转换 Markdown
+            const lines = summary.split('\n');
+            const result = [];
+            let inList = false;
+
+            for (const raw of lines) {
+                const line = raw
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+                if (/^#{1,6}\s/.test(raw)) {
+                    if (inList) { result.push('</ul>'); inList = false; }
+                    const level = raw.match(/^(#{1,6})/)[1].length;
+                    const text = line.replace(/^#{1,6}\s+/, '');
+                    result.push(`<h${level} class="bas-summary-h${level}">${text}</h${level}>`);
+                } else if (/^[-*]\s+/.test(raw)) {
+                    if (!inList) { result.push('<ul>'); inList = true; }
+                    result.push(`<li>${line.replace(/^[-*]\s+/, '')}</li>`);
+                } else if (raw.trim() === '') {
+                    if (inList) { result.push('</ul>'); inList = false; }
+                    result.push('');
+                } else {
+                    if (inList) { result.push('</ul>'); inList = false; }
+                    result.push(`<p>${line}</p>`);
+                }
+            }
+            if (inList) result.push('</ul>');
+
+            return result.join('');
         },
 
         escapeHtml(text) {
@@ -306,65 +327,123 @@
             biliCards.forEach(card => this.injectBilibili(card));
         },
 
+        // 穿透 shadow DOM 查找元素
+        deepQuerySelector(root, selector) {
+            // 先在普通 DOM 中查找
+            let el = root.querySelector(selector);
+            if (el) return el;
+
+            // 遍历所有子节点，尝试穿透 shadow root
+            const all = root.querySelectorAll('*');
+            for (const node of all) {
+                if (node.shadowRoot) {
+                    el = this.deepQuerySelector(node.shadowRoot, selector);
+                    if (el) return el;
+                }
+            }
+            return null;
+        },
+
         injectYouTube(card) {
             if (this.processedCards.has(card)) return;
 
-            // 获取视频链接 - 多种选择器尝试
-            const linkSelectors = [
-                'a#video-title',
-                'a#thumbnail',
-                'a[href*="watch?v="]',
-                '#dismissible a',
-                'ytd-thumbnail a',
-                'a.yt-simple-endpoint'
-            ];
-            
-            let link = null;
-            for (const selector of linkSelectors) {
-                link = card.querySelector(selector);
-                if (link && link.href && link.href.includes('watch?v=')) break;
-            }
-            if (!link) return;
+            // 先标记，避免重复处理（即便此次没找到链接，下次 mutation 会重试）
+            // 注意：只有成功注入后才加入 processedCards
 
-            const videoUrl = link.href;
-            if (!videoUrl.includes('watch?v=')) return;
+            // 获取视频链接 - 先尝试普通 DOM，再穿透 shadow DOM
+            let videoUrl = null;
 
-            // 创建按钮
-            const btn = this.createButton(videoUrl, 'youtube');
-
-            // 查找缩略图容器 - 优先在整个卡片上添加按钮
-            // YouTube 缩略图结构: ytd-thumbnail > a#thumbnail > yt-image
-            const thumbnailSelectors = [
-                'ytd-thumbnail',
-                '#thumbnail',
-                'a#thumbnail',
-                '.yt-simple-endpoint:first-child'
-            ];
-            
-            let thumbnail = null;
-            for (const selector of thumbnailSelectors) {
-                thumbnail = card.querySelector(selector);
-                if (thumbnail) break;
+            // 从 card 属性或普通 DOM 中快速获取
+            const directLinks = card.querySelectorAll('a[href*="watch?v="]');
+            if (directLinks.length > 0) {
+                videoUrl = directLinks[0].href;
             }
 
-            // 在缩略图或卡片上添加按钮
-            const targetEl = thumbnail || card;
-            targetEl.style.position = 'relative';
+            // 穿透 shadow DOM 查找
+            if (!videoUrl) {
+                const shadowLink = this.deepQuerySelector(card, 'a[href*="watch?v="]');
+                if (shadowLink) videoUrl = shadowLink.href;
+            }
 
-            // 检查是否已有按钮容器
-            let btnContainer = targetEl.querySelector('.bas-btn-container');
-            if (!btnContainer) {
-                btnContainer = document.createElement('div');
-                btnContainer.className = 'bas-btn-container bas-yt-btn-container';
-                // 确保插入到最顶层，不被其他元素遮挡
-                if (targetEl.shadowRoot) {
-                    // 处理 shadow DOM（YouTube 某些元素使用）
-                    targetEl.shadowRoot.appendChild(btnContainer);
+            if (!videoUrl) return;
+
+            // 查找缩略图容器挂载按钮
+            // YouTube 缩略图: ytd-thumbnail 是自定义元素，内部有 shadow DOM
+            const ytdThumbnail = card.querySelector('ytd-thumbnail');
+            let targetEl = ytdThumbnail || card;
+
+            // 若 ytd-thumbnail 有 shadow root，在其 shadow root 内注入
+            // 否则直接挂在 ytd-thumbnail 或 card 上
+            let mountPoint = targetEl;
+            if (ytdThumbnail && ytdThumbnail.shadowRoot) {
+                // 在 shadow root 内找一个有位置的容器
+                const innerLink = ytdThumbnail.shadowRoot.querySelector('a');
+                if (innerLink) {
+                    mountPoint = innerLink;
                 } else {
-                    targetEl.appendChild(btnContainer);
+                    mountPoint = ytdThumbnail.shadowRoot.firstElementChild || ytdThumbnail;
                 }
             }
-            btnContainer.appendChild(btn);
+
+            // 已有按钮则跳过
+            if (mountPoint.querySelector && mountPoint.querySelector('.bas-btn-container')) {
+                this.processedCards.add(card);
+                return;
+            }
+
+            mountPoint.style.position = 'relative';
+
+            const btnContainer = document.createElement('div');
+            btnContainer.className = 'bas-btn-container bas-yt-btn-container';
+            btnContainer.appendChild(this.createButton(videoUrl, 'youtube'));
+            mountPoint.appendChild(btnContainer);
+
+            // 为 hover 显示注入内联样式（不依赖外部 CSS 穿透 shadow DOM）
+            if (ytdThumbnail && ytdThumbnail.shadowRoot) {
+                const shadowStyle = document.createElement('style');
+                shadowStyle.textContent = `
+                    .bas-btn-container {
+                        position: absolute !important;
+                        top: 8px !important;
+                        right: 8px !important;
+                        z-index: 999 !important;
+                        opacity: 0;
+                        transition: opacity 0.2s;
+                        width: 32px !important;
+                        height: 32px !important;
+                        display: block !important;
+                        overflow: visible !important;
+                    }
+                    :host(:hover) .bas-btn-container,
+                    a:hover .bas-btn-container,
+                    .bas-btn-container:hover {
+                        opacity: 1;
+                    }
+                    .bas-summarize-btn {
+                        display: flex !important;
+                        align-items: center;
+                        justify-content: center;
+                        width: 32px !important;
+                        height: 32px !important;
+                        border: none;
+                        border-radius: 6px;
+                        cursor: pointer;
+                        font-size: 16px;
+                        transition: all 0.2s;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                        pointer-events: auto;
+                        background: rgba(0,0,0,0.7);
+                        color: white;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+                    .bas-summarize-btn:hover:not(:disabled) {
+                        transform: scale(1.1);
+                        background: rgba(204,0,0,0.9);
+                    }
+                `;
+                ytdThumbnail.shadowRoot.appendChild(shadowStyle);
+            }
 
             this.processedCards.add(card);
         },
@@ -478,7 +557,7 @@
                     z-index: 999 !important;
                     opacity: 0;
                     transition: opacity 0.2s;
-                    pointer-events: none;
+                    /* 不设置 pointer-events: none，让按钮可点击 */
                     margin: 0 !important;
                     padding: 0 !important;
                     width: 32px !important;
@@ -487,7 +566,7 @@
                     overflow: visible !important;
                     box-sizing: border-box !important;
                 }
-                
+
                 /* Bilibili hover */
                 .bili-video-card:hover .bas-btn-container,
                 .bili-video-card__cover:hover .bas-btn-container,
@@ -495,15 +574,15 @@
                 .feed-card__cover:hover .bas-btn-container,
                 .recommend-list__item:hover .bas-btn-container,
                 .recommend-list__item-link:hover .bas-btn-container,
-                /* YouTube hover - 使用整个卡片作为触发区域 */
+                /* YouTube hover - 普通 DOM 情况（非 shadow DOM 挂载） */
                 ytd-rich-item-renderer:hover .bas-btn-container,
                 ytd-video-renderer:hover .bas-btn-container,
                 ytd-grid-video-renderer:hover .bas-btn-container,
                 ytd-compact-video-renderer:hover .bas-btn-container,
-                ytd-thumbnail:hover .bas-btn-container,
-                #thumbnail:hover .bas-btn-container,
-                a#thumbnail:hover .bas-btn-container,
-                /* 直接 hover 按钮 */
+                /* 父元素 hover 显示按钮 */
+                [style*="position: relative"]:hover > .bas-btn-container,
+                a:hover > .bas-btn-container,
+                /* 直接 hover 按钮容器或按钮本身 */
                 .bas-btn-container:hover {
                     opacity: 1;
                 }
@@ -736,6 +815,24 @@
                     margin: 4px 0;
                 }
 
+                .bas-task-summary h1,
+                .bas-task-summary h2,
+                .bas-task-summary h3,
+                .bas-task-summary h4,
+                .bas-task-summary h5,
+                .bas-task-summary h6 {
+                    margin: 12px 0 4px 0;
+                    line-height: 1.3;
+                    font-weight: 600;
+                }
+
+                .bas-task-summary h1 { font-size: 16px; }
+                .bas-task-summary h2 { font-size: 15px; }
+                .bas-task-summary h3 { font-size: 14px; }
+                .bas-task-summary h4,
+                .bas-task-summary h5,
+                .bas-task-summary h6 { font-size: 13px; }
+
                 .bas-task-completed .bas-task-status {
                     background: rgba(76, 175, 80, 0.1);
                     color: #4caf50;
@@ -785,6 +882,15 @@
 
         // 开始监听视频卡片
         VideoCardInjector.init();
+
+        // YouTube 是 SPA，监听页面导航事件重新扫描
+        if (location.hostname.includes('youtube.com')) {
+            document.addEventListener('yt-navigate-finish', () => {
+                // 导航完成后稍等 DOM 渲染再扫描
+                setTimeout(() => VideoCardInjector.scanAndInject(), 500);
+                setTimeout(() => VideoCardInjector.scanAndInject(), 1500);
+            });
+        }
 
         console.log('Bili-ASR-Sum: 已加载');
     }
