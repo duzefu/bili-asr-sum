@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     # 火山引擎豆包 ASR
     volcengine_app_id: str = ""
     volcengine_access_token: str = ""
+    volcengine_resource_id: str = "volc.bigasr.auc_turbo"
 
     # DeepSeek
     deepseek_api_key: str = ""
