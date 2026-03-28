@@ -64,7 +64,7 @@ async def summarize(title: str, transcript: str) -> str:
     except BadRequestError as exc:
         if "Content Exists Risk" in str(exc):
             raise RuntimeError(
-                "视频内容触发了 DeepSeek 内容审核，无法生成总结。"
+                "视频内容触发了 LLM 内容审核，无法生成总结。"
                 "请尝试其他视频。"
             ) from exc
         raise
