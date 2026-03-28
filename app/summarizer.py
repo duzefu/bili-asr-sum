@@ -1,4 +1,4 @@
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, BadRequestError
 
 from app.config import settings
 
@@ -52,13 +52,21 @@ async def summarize(title: str, transcript: str) -> str:
     if len(transcript) > max_transcript_len:
         transcript = transcript[:max_transcript_len] + "\n\n[内容过长，已截断]"
 
-    response = await client.chat.completions.create(
-        model="deepseek-chat",
-        messages=[
-            {"role": "user", "content": _build_user_message(title, transcript)},
-        ],
-        temperature=1,
-        max_tokens=4096,
-    )
+    try:
+        response = await client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "user", "content": _build_user_message(title, transcript)},
+            ],
+            temperature=1,
+            max_tokens=4096,
+        )
+    except BadRequestError as exc:
+        if "Content Exists Risk" in str(exc):
+            raise RuntimeError(
+                "视频内容触发了 DeepSeek 内容审核，无法生成总结。"
+                "请尝试其他视频。"
+            ) from exc
+        raise
 
     return response.choices[0].message.content

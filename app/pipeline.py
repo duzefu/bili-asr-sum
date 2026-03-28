@@ -1,8 +1,15 @@
+import logging
+from datetime import datetime, timezone
+
+import app.cache as cache_module
+from app.cache import CachedContent
 from app.config import settings
 from app.downloader import cleanup_task_files, download_audio, download_subtitles
 from app.summarizer import summarize
 from app.task_manager import task_manager
 from app.asr import get_asr_provider
+
+logger = logging.getLogger(__name__)
 
 
 async def run_pipeline(task_id: str, url: str) -> None:
@@ -12,8 +19,27 @@ async def run_pipeline(task_id: str, url: str) -> None:
     2. transcribing - ASR 识别（仅无字幕时）
     3. summarizing  - DeepSeek LLM 生成总结
     4. completed    - 写入结果
+
+    若内容缓存命中，跳过全部处理直接返回结果。
     """
     try:
+        # 缓存查找：命中则跳过全部下载/ASR/LLM 流程
+        if cache_module.content_cache is not None:
+            try:
+                cached = await cache_module.content_cache.get(url)
+            except Exception as exc:
+                logger.warning("缓存读取失败，降级到正常流程: %s", exc)
+                cached = None
+            if cached is not None:
+                await task_manager.update(
+                    task_id,
+                    status="completed",
+                    title=cached.title,
+                    summary=cached.summary,
+                    transcript_source=cached.transcript_source,
+                )
+                return
+
         await task_manager.update(task_id, status="downloading")
 
         # Step 1: 尝试下载字幕
@@ -45,6 +71,20 @@ async def run_pipeline(task_id: str, url: str) -> None:
             transcript_source=transcript_source,
         )
         summary = await summarize(title, transcript)
+
+        # 写入缓存（失败不影响任务结果）
+        if cache_module.content_cache is not None:
+            try:
+                entry = CachedContent(
+                    title=title,
+                    summary=summary,
+                    transcript_source=transcript_source,
+                    transcript=transcript if settings.cache_store_transcript else None,
+                    cached_at=datetime.now(timezone.utc).isoformat(),
+                )
+                await cache_module.content_cache.set(url, entry, settings.cache_ttl_seconds)
+            except Exception as exc:
+                logger.warning("缓存写入失败（不影响任务结果）: %s", exc)
 
         # Step 4: 完成
         await task_manager.update(task_id, status="completed", summary=summary)

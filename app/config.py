@@ -23,5 +23,14 @@ class Settings(BaseSettings):
     # 临时文件目录
     temp_dir: Path = Path("temp")
 
+    # 内容缓存
+    cache_backend: Literal["memory", "upstash"] = "memory"
+    cache_ttl_seconds: int = 2_592_000      # 30天；0 = 不设过期（不推荐）
+    cache_store_transcript: bool = False    # 是否缓存原文（影响存储大小）
+
+    # Upstash Redis REST（仅 cache_backend=upstash 时必填）
+    upstash_redis_rest_url: str = ""
+    upstash_redis_rest_token: str = ""
+
 
 settings = Settings()

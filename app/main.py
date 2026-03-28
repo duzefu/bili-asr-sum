@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+import app.cache as cache_module
+from app.cache import get_content_cache
 from app.config import settings
 from app.models import SummarizeRequest, SubmitResponse, TaskResponse
 from app.pipeline import run_pipeline
@@ -16,7 +18,12 @@ from app.task_manager import task_manager
 async def lifespan(app: FastAPI):
     # 确保临时目录存在
     settings.temp_dir.mkdir(parents=True, exist_ok=True)
+    # 初始化内容缓存后端
+    cache_module.content_cache = get_content_cache(settings)
     yield
+    # 关闭缓存（释放 HTTP 连接池等资源）
+    if cache_module.content_cache is not None:
+        await cache_module.content_cache.close()
 
 
 app = FastAPI(
