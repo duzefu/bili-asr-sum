@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bili-asr-sum · 视频总结</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body>
+  <div class="container" x-data="appState()" x-init="init()">
+
+    <!-- 页头 -->
+    <header>
+      <h1>bili-asr-sum</h1>
+      <p>输入 Bilibili 或 YouTube 链接，自动生成视频内容总结</p>
+    </header>
+
+    <!-- 输入区 -->
+    <section class="input-section">
+      <form @submit.prevent="submit()">
+        <div class="input-row">
+          <input
+            class="url-input"
+            type="text"
+            x-model="url"
+            placeholder="粘贴 Bilibili 或 YouTube 视频链接..."
+            :disabled="loading"
+          />
+          <button class="btn-primary" type="submit" :disabled="loading || !url.trim()">
+            <span x-show="loading"><span class="spinner"></span>处理中</span>
+            <span x-show="!loading">生成总结</span>
+          </button>
+        </div>
+        <p class="input-hint">支持 bilibili.com、youtube.com、youtu.be 等链接</p>
+      </form>
+    </section>
+
+    <!-- 全局错误提示 -->
+    <div class="error-toast" x-show="globalError" x-transition>
+      <span x-text="globalError"></span>
+      <button @click="globalError = ''" title="关闭">✕</button>
+    </div>
+
+    <!-- 任务卡片：处理中 / 完成 / 失败 -->
+    <div class="task-card" x-show="currentTask" x-transition>
+
+      <!-- 进度区域（非 completed 或 failed 时显示动态状态，completed/failed 也显示进度条） -->
+      <div class="progress-section">
+        <div class="progress-header">
+          <span
+            class="status-label"
+            :class="{ 'is-completed': currentTask?.status === 'completed', 'is-failed': currentTask?.status === 'failed' }"
+            x-text="statusLabel"
+          ></span>
+          <span class="progress-pct" x-show="currentTask?.status !== 'completed' && currentTask?.status !== 'failed'" x-text="progressPercent + '%'"></span>
+        </div>
+        <div class="progress-bar">
+          <div
+            class="progress-fill"
+            :class="{ 'is-completed': currentTask?.status === 'completed', 'is-failed': currentTask?.status === 'failed' }"
+            :style="`width: ${progressPercent}%`"
+          ></div>
+        </div>
+      </div>
+
+      <!-- 完成：总结结果 -->
+      <template x-if="currentTask?.status === 'completed'">
+        <div>
+          <div class="result-meta">
+            <div class="result-title" x-text="currentTask.title || '（无标题）'"></div>
+            <div class="result-actions">
+              <span
+                class="badge"
+                :class="currentTask.transcript_source === 'subtitle' ? 'badge-subtitle' : 'badge-asr'"
+                x-text="currentTask.transcript_source === 'subtitle' ? '字幕' : 'ASR 识别'"
+              ></span>
+              <a class="link-btn" :href="currentTask.url" target="_blank" rel="noopener">原视频</a>
+            </div>
+          </div>
+          <div class="summary-body" x-html="renderMarkdown(currentTask.summary)"></div>
+        </div>
+      </template>
+
+      <!-- 失败：错误信息 -->
+      <template x-if="currentTask?.status === 'failed'">
+        <div class="error-detail">
+          <p x-text="currentTask.error || '未知错误，请重试'"></p>
+        </div>
+      </template>
+
+    </div>
+
+    <!-- 历史记录 -->
+    <section class="history-section" x-show="history.length > 0">
+      <h3>历史记录</h3>
+      <div class="history-list">
+        <template x-for="item in history" :key="item.task_id">
+          <div class="history-item" @click="loadFromHistory(item)">
+            <span class="history-item-title" x-text="item.title || item.url"></span>
+            <span class="history-item-date" x-text="formatDate(item.created_at)"></span>
+          </div>
+        </template>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    // 同域部署时用空字符串（相对路径），本地 file:// 打开时指向 localhost:8000
+    const API_BASE = window.location.protocol === 'file:' ? 'http://localhost:8000' : ''
+
+    const STATUS_PROGRESS = {
+      pending: 10,
+      downloading: 30,
+      transcribing: 55,
+      summarizing: 80,
+      completed: 100,
+      failed: 0,
+    }
+
+    const STATUS_LABELS = {
+      pending: '等待中...',
+      downloading: '下载字幕/音频...',
+      transcribing: 'ASR 语音识别中...',
+      summarizing: 'AI 生成总结中...',
+      completed: '完成',
+      failed: '处理失败',
+    }
+
+    function appState() {
+      return {
+        url: '',
+        loading: false,
+        currentTask: null,
+        polling: null,
+        globalError: '',
+        history: [],
+
+        get statusLabel() {
+          if (!this.currentTask) return ''
+          return STATUS_LABELS[this.currentTask.status] || this.currentTask.status
+        },
+
+        get progressPercent() {
+          if (!this.currentTask) return 0
+          return STATUS_PROGRESS[this.currentTask.status] ?? 0
+        },
+
+        init() {
+          this.loadHistory()
+        },
+
+        async submit() {
+          const trimmed = this.url.trim()
+          if (!trimmed) return
+          this.globalError = ''
+          this.loading = true
+          this.stopPolling()
+          this.currentTask = null
+
+          try {
+            const res = await fetch(`${API_BASE}/api/summarize`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url: trimmed }),
+            })
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({}))
+              throw new Error(body.detail || `请求失败 (HTTP ${res.status})`)
+            }
+            const data = await res.json()
+            this.currentTask = { task_id: data.task_id, status: data.status, url: trimmed }
+            this.startPolling(data.task_id)
+          } catch (e) {
+            this.globalError = e.message || '提交失败，请检查网络'
+          } finally {
+            this.loading = false
+          }
+        },
+
+        startPolling(taskId) {
+          let failCount = 0
+          this.polling = setInterval(async () => {
+            try {
+              const res = await fetch(`${API_BASE}/api/tasks/${taskId}`)
+              if (!res.ok) throw new Error(`HTTP ${res.status}`)
+              const data = await res.json()
+              this.currentTask = data
+              failCount = 0
+              if (data.status === 'completed' || data.status === 'failed') {
+                this.stopPolling()
+                if (data.status === 'completed') this.saveToHistory(data)
+              }
+            } catch (e) {
+              failCount++
+              if (failCount >= 3) {
+                this.stopPolling()
+                this.globalError = '网络请求失败，请刷新页面重试'
+              }
+            }
+          }, 2000)
+        },
+
+        stopPolling() {
+          if (this.polling) {
+            clearInterval(this.polling)
+            this.polling = null
+          }
+        },
+
+        renderMarkdown(text) {
+          if (!text) return ''
+          return marked.parse(text)
+        },
+
+        saveToHistory(task) {
+          const item = {
+            task_id: task.task_id,
+            url: task.url,
+            title: task.title || task.url,
+            created_at: task.created_at,
+          }
+          this.history = [item, ...this.history.filter(h => h.task_id !== task.task_id)].slice(0, 20)
+          try {
+            localStorage.setItem('bili_asr_history', JSON.stringify(this.history))
+          } catch {}
+        },
+
+        loadHistory() {
+          try {
+            const raw = localStorage.getItem('bili_asr_history')
+            if (raw) this.history = JSON.parse(raw)
+          } catch {}
+        },
+
+        async loadFromHistory(item) {
+          this.globalError = ''
+          this.stopPolling()
+          this.loading = true
+          try {
+            const res = await fetch(`${API_BASE}/api/tasks/${item.task_id}`)
+            if (res.status === 404) {
+              throw new Error('该任务已因服务重启丢失，请重新提交链接')
+            }
+            if (!res.ok) throw new Error(`请求失败 (HTTP ${res.status})`)
+            this.currentTask = await res.json()
+            this.url = item.url
+          } catch (e) {
+            this.globalError = e.message
+          } finally {
+            this.loading = false
+          }
+        },
+
+        formatDate(isoStr) {
+          if (!isoStr) return ''
+          try {
+            const d = new Date(isoStr)
+            const now = new Date()
+            const diffMs = now - d
+            const diffMin = Math.floor(diffMs / 60000)
+            if (diffMin < 1) return '刚刚'
+            if (diffMin < 60) return `${diffMin} 分钟前`
+            const diffHour = Math.floor(diffMin / 60)
+            if (diffHour < 24) return `${diffHour} 小时前`
+            return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
+          } catch {
+            return ''
+          }
+        },
+      }
+    }
+  </script>
+</body>
+</html>
