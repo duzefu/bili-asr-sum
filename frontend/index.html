@@ -212,7 +212,7 @@
 
         renderMarkdown(text) {
           if (!text) return ''
-          return marked.parse(text)
+          return marked.parse(text, { gfm: true, breaks: true })
         },
 
         saveToHistory(task) {
