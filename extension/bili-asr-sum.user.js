@@ -98,7 +98,7 @@
 
         // 轮询任务状态直到完成
         async pollTask(taskId, onProgress) {
-            const maxAttempts = 120; // 最多轮询2分钟
+            const maxAttempts = 300; // 最多轮询5分钟
             const interval = 1000; // 1秒间隔
 
             for (let i = 0; i < maxAttempts; i++) {
