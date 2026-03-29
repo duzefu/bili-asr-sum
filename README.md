@@ -141,6 +141,33 @@ curl http://localhost:8000/health
 
 服务启动后访问 `http://localhost:8000/docs` 查看 Swagger UI。
 
+## 🧩 油猴脚本
+
+提供浏览器油猴脚本，在 YouTube 和 Bilibili 视频缩略图旁添加总结按钮，一键获取视频内容摘要。
+
+### 功能
+
+- 🖱️ 鼠标悬停视频缩略图时显示总结按钮
+- 📝 点击按钮即可提交视频进行总结
+- 📊 侧边栏实时显示处理进度和结果
+- 🎨 自动适配 YouTube / Bilibili 深色模式
+- ⚙️ 通过油猴菜单配置 API 服务地址
+
+### 安装
+
+1. 安装浏览器扩展 [Tampermonkey](https://www.tampermonkey.net/)
+2. 打开脚本文件 [`extension/bili-asr-sum.user.js`](extension/bili-asr-sum.user.js)
+3. 点击 Tampermonkey 扩展图标，选择「添加新脚本」
+4. 将脚本内容复制粘贴并保存
+
+### 使用
+
+1. 访问 YouTube 或 Bilibili 网站
+2. 点击 Tampermonkey 扩展菜单中的「⚙️ 设置 API 地址」
+3. 输入已部署的 API 服务地址（如 `https://api.example.com`）
+4. 鼠标悬停任意视频缩略图，点击右上角的 📝 按钮
+5. 侧边栏将自动弹出，显示处理进度和总结结果
+
 ## 🛠️ 开发
 
 ### 运行测试

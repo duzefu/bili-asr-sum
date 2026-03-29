@@ -141,6 +141,33 @@ curl http://localhost:8000/health
 
 After starting the service, visit `http://localhost:8000/docs` to view Swagger UI.
 
+## 🧩 Userscript
+
+A browser userscript is provided that adds a summary button next to YouTube and Bilibili video thumbnails for one-click video content summarization.
+
+### Features
+
+- 🖱️ Summary button appears when hovering over video thumbnails
+- 📝 Click the button to submit the video for summarization
+- 📊 Sidebar displays processing progress and results in real-time
+- 🎨 Auto-adapts to YouTube / Bilibili dark mode
+- ⚙️ Configure API service address via userscript menu
+
+### Installation
+
+1. Install browser extension [Tampermonkey](https://www.tampermonkey.net/)
+2. Open script file [`extension/bili-asr-sum.user.js`](extension/bili-asr-sum.user.js)
+3. Click Tampermonkey extension icon, select "Add new script"
+4. Copy and paste script content and save
+
+### Usage
+
+1. Visit YouTube or Bilibili website
+2. Click "⚙️ 设置 API 地址" in Tampermonkey extension menu
+3. Enter your deployed API service address (e.g., `https://api.example.com`)
+4. Hover over any video thumbnail, click the 📝 button in the top-right corner
+5. Sidebar will automatically pop up, showing processing progress and summary results
+
 ## 🛠️ Development
 
 ### Run Tests
