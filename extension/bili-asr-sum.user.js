@@ -174,19 +174,31 @@
             taskEl.id = `bas-task-${taskId}`;
             taskEl.innerHTML = `
                 <div class="bas-task-header">
+                    <button class="bas-task-collapse" title="折叠/展开">▾</button>
                     <span class="bas-task-title">${this.escapeHtml(videoTitle || '获取中...')}</span>
                     <button class="bas-task-remove">&times;</button>
                 </div>
-                <div class="bas-task-status">
-                    <span class="bas-status-icon">⏳</span>
-                    <span class="bas-status-text">等待处理...</span>
+                <div class="bas-task-body">
+                    <div class="bas-task-status">
+                        <span class="bas-status-icon">⏳</span>
+                        <span class="bas-status-text">等待处理...</span>
+                    </div>
+                    <div class="bas-task-summary" style="display:none;"></div>
                 </div>
-                <div class="bas-task-summary" style="display:none;"></div>
             `;
 
             taskEl.querySelector('.bas-task-remove').addEventListener('click', () => {
                 taskEl.remove();
                 this.tasks.delete(taskId);
+            });
+
+            taskEl.querySelector('.bas-task-collapse').addEventListener('click', () => {
+                const body = taskEl.querySelector('.bas-task-body');
+                const btn = taskEl.querySelector('.bas-task-collapse');
+                const collapsed = body.style.display === 'none';
+                body.style.display = collapsed ? '' : 'none';
+                btn.textContent = collapsed ? '▾' : '▸';
+                taskEl.classList.toggle('bas-task-collapsed', !collapsed);
             });
 
             this.taskList.insertBefore(taskEl, this.taskList.firstChild);
@@ -732,8 +744,32 @@
                     display: flex;
                     align-items: flex-start;
                     justify-content: space-between;
-                    gap: 8px;
+                    gap: 4px;
                     margin-bottom: 8px;
+                }
+
+                .bas-task-collapsed .bas-task-header {
+                    margin-bottom: 0;
+                }
+
+                .bas-task-collapse {
+                    flex-shrink: 0;
+                    width: 20px;
+                    height: 20px;
+                    border: none;
+                    background: transparent;
+                    font-size: 14px;
+                    cursor: pointer;
+                    border-radius: 4px;
+                    color: #999;
+                    padding: 0;
+                    line-height: 1;
+                    margin-top: 1px;
+                }
+
+                .bas-task-collapse:hover {
+                    background: rgba(0,0,0,0.1);
+                    color: #333;
                 }
 
                 .bas-task-title {
