@@ -320,23 +320,20 @@
         },
 
         scanAndInject(root = document.body) {
+            const YT_SELECTOR = 'ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer';
+            const BILI_SELECTOR = '.bili-video-card, .bili-video-card-recommend, .feed-card, .recommend-list__item';
+
+            // root 本身可能就是视频卡片（滚动加载时 MutationObserver 直接传入卡片节点）
+            if (root.matches) {
+                if (root.matches(YT_SELECTOR)) this.injectYouTube(root);
+                else if (root.matches(BILI_SELECTOR)) this.injectBilibili(root);
+            }
+
             // YouTube 视频卡片
-            const ytCards = root.querySelectorAll(`
-                ytd-rich-item-renderer,
-                ytd-video-renderer,
-                ytd-grid-video-renderer,
-                ytd-compact-video-renderer
-            `);
-            ytCards.forEach(card => this.injectYouTube(card));
+            root.querySelectorAll(YT_SELECTOR).forEach(card => this.injectYouTube(card));
 
             // Bilibili 视频卡片
-            const biliCards = root.querySelectorAll(`
-                .bili-video-card,
-                .bili-video-card-recommend,
-                .feed-card,
-                .recommend-list__item
-            `);
-            biliCards.forEach(card => this.injectBilibili(card));
+            root.querySelectorAll(BILI_SELECTOR).forEach(card => this.injectBilibili(card));
         },
 
         // 穿透 shadow DOM 查找元素
@@ -362,40 +359,45 @@
             // 先标记，避免重复处理（即便此次没找到链接，下次 mutation 会重试）
             // 注意：只有成功注入后才加入 processedCards
 
-            // 获取视频链接 - 先尝试普通 DOM，再穿透 shadow DOM
+            // 查找缩略图容器，并从中获取视频链接
+            // 优先检测新版 View Model 架构（yt-lockup-view-model），其缩略图 <a> 在普通 DOM 中
+            const viewModelLink = card.querySelector('a.yt-lockup-view-model__content-image');
+            // 旧版架构使用 ytd-thumbnail（shadow DOM）
+            const ytdThumbnail = viewModelLink ? null : card.querySelector('ytd-thumbnail');
+            let mountPoint = viewModelLink || ytdThumbnail || card;
             let videoUrl = null;
 
-            // 从 card 属性或普通 DOM 中快速获取
-            const directLinks = card.querySelectorAll('a[href*="watch?v="]');
-            if (directLinks.length > 0) {
-                videoUrl = directLinks[0].href;
+            if (viewModelLink) {
+                // 新版架构：<a> 直接在普通 DOM 中，href 可直接读取
+                if (viewModelLink.href && viewModelLink.href.includes('watch?v=')) {
+                    videoUrl = viewModelLink.href;
+                }
+            } else if (ytdThumbnail && ytdThumbnail.shadowRoot) {
+                const innerLink = ytdThumbnail.shadowRoot.querySelector('a');
+                if (innerLink) {
+                    mountPoint = innerLink;
+                    // 直接从缩略图的 <a> 取 URL，避免跨卡片污染
+                    if (innerLink.href && innerLink.href.includes('watch?v=')) {
+                        videoUrl = innerLink.href;
+                    }
+                } else {
+                    mountPoint = ytdThumbnail.shadowRoot.firstElementChild || ytdThumbnail;
+                }
             }
 
-            // 穿透 shadow DOM 查找
+            // 兜底：从普通 DOM 查找
+            if (!videoUrl) {
+                const directLinks = card.querySelectorAll('a[href*="watch?v="]');
+                if (directLinks.length > 0) videoUrl = directLinks[0].href;
+            }
+
+            // 再兜底：穿透 shadow DOM 查找
             if (!videoUrl) {
                 const shadowLink = this.deepQuerySelector(card, 'a[href*="watch?v="]');
                 if (shadowLink) videoUrl = shadowLink.href;
             }
 
             if (!videoUrl) return;
-
-            // 查找缩略图容器挂载按钮
-            // YouTube 缩略图: ytd-thumbnail 是自定义元素，内部有 shadow DOM
-            const ytdThumbnail = card.querySelector('ytd-thumbnail');
-            let targetEl = ytdThumbnail || card;
-
-            // 若 ytd-thumbnail 有 shadow root，在其 shadow root 内注入
-            // 否则直接挂在 ytd-thumbnail 或 card 上
-            let mountPoint = targetEl;
-            if (ytdThumbnail && ytdThumbnail.shadowRoot) {
-                // 在 shadow root 内找一个有位置的容器
-                const innerLink = ytdThumbnail.shadowRoot.querySelector('a');
-                if (innerLink) {
-                    mountPoint = innerLink;
-                } else {
-                    mountPoint = ytdThumbnail.shadowRoot.firstElementChild || ytdThumbnail;
-                }
-            }
 
             // 已有按钮则跳过
             if (mountPoint.querySelector && mountPoint.querySelector('.bas-btn-container')) {
@@ -411,7 +413,8 @@
             mountPoint.appendChild(btnContainer);
 
             // 为 hover 显示注入内联样式（不依赖外部 CSS 穿透 shadow DOM）
-            if (ytdThumbnail && ytdThumbnail.shadowRoot) {
+            // 新版 View Model 架构在普通 DOM 中，全局 CSS 已覆盖，无需注入 shadow 样式
+            if (!viewModelLink && ytdThumbnail && ytdThumbnail.shadowRoot) {
                 const shadowStyle = document.createElement('style');
                 shadowStyle.textContent = `
                     .bas-btn-container {
