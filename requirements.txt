@@ -7,3 +7,9 @@ openai>=1.0
 dashscope>=1.20
 python-dotenv>=1.0
 aiofiles>=23.0
+
+# 本地 SenseVoice ASR 依赖 (可选)
+funasr>=1.0
+modelscope>=1.10
+torch>=2.0
+torchaudio>=2.0
