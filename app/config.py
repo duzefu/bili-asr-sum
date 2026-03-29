@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    asr_provider: Literal["aliyun", "volcengine"] = "aliyun"
+    asr_provider: Literal["aliyun", "volcengine", "local_sensevoice"] = "aliyun"
 
     # 阿里云 DashScope
     aliyun_dashscope_api_key: str = ""
@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     volcengine_app_id: str = ""
     volcengine_access_token: str = ""
     volcengine_resource_id: str = "volc.bigasr.auc_turbo"
+
+    # 本地 SenseVoice（离线，无需 API Key）
+    local_asr_device: str = "cpu"          # cpu / cuda:0 / mps
+    local_asr_language: str = "auto"       # auto / zh / en / ja / ko / yue
 
     # DeepSeek
     deepseek_api_key: str = ""

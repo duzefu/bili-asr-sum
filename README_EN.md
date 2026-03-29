@@ -8,9 +8,10 @@ Bilibili / YouTube video content summarization service. Submit a video link to a
 
 - 🎥 Supports Bilibili and YouTube video links
 - 📝 Prioritizes video's built-in subtitles; automatically downloads audio and performs ASR when no subtitles are available
-- 🎙️ Supports two ASR backends, switchable via configuration:
+- 🎙️ Supports three ASR backends, switchable via configuration:
   - **Alibaba Cloud DashScope FunASR** (`paraformer-v2`)
   - **Volcengine Doubao Speech Recognition** (Large Model Recording Express Edition)
+  - **Local SenseVoice-Small** (offline, no API key required, Apache 2.0)
 - 🤖 Uses DeepSeek API to generate Chinese summaries (core topics / main content / key conclusions)
 - ⏳ Asynchronous processing + status polling, suitable for long video scenarios
 - 💾 Supports content caching to avoid reprocessing the same video:
@@ -52,11 +53,13 @@ Edit `.env` and fill in the following:
 
 | Variable | Required | Description |
 |---|---|---|
-| `ASR_PROVIDER` | Yes | `aliyun` or `volcengine` |
+| `ASR_PROVIDER` | Yes | `aliyun`, `volcengine`, or `local_sensevoice` |
 | `ALIYUN_DASHSCOPE_API_KEY` | Required for aliyun | Alibaba Cloud DashScope API Key |
 | `VOLCENGINE_APP_ID` | Required for volcengine | Volcengine App ID |
 | `VOLCENGINE_ACCESS_TOKEN` | Required for volcengine | Volcengine Access Token |
 | `VOLCENGINE_RESOURCE_ID` | No | Volcengine Resource ID, default `volc.bigasr.auc_turbo` |
+| `LOCAL_ASR_DEVICE` | No | Local ASR inference device, default `cpu` (e.g. `cuda:0`, `mps`) |
+| `LOCAL_ASR_LANGUAGE` | No | Local ASR language, default `auto` (e.g. `zh`, `en`) |
 | `DEEPSEEK_API_KEY` | Yes | DeepSeek API Key |
 | `CACHE_BACKEND` | No | Cache backend: `memory` (default) or `upstash` |
 | `CACHE_TTL_SECONDS` | No | Cache TTL in seconds, default 30 days |
@@ -193,9 +196,10 @@ app/
 │   ├── memory.py     # In-memory cache implementation
 │   └── upstash.py    # Upstash Redis implementation
 └── asr/
-    ├── base.py       # ASRProvider abstract base class
-    ├── aliyun.py     # Alibaba Cloud DashScope FunASR
-    └── volcengine.py # Volcengine Doubao ASR
+    ├── base.py             # ASRProvider abstract base class
+    ├── aliyun.py           # Alibaba Cloud DashScope FunASR
+    ├── volcengine.py       # Volcengine Doubao ASR
+    └── local_sensevoice.py # Local SenseVoice offline ASR
 tests/
 ├── conftest.py
 ├── test_downloader.py
@@ -210,4 +214,5 @@ tests/
 - 💾 Task status is stored in memory and will be lost after service restart (completed video results can be recovered via cache)
 - 🔊 Volcengine ASR currently uses the Large Model Recording Express Edition, requiring 16kHz audio sample rate, with single files not exceeding 2 hours or 100MB
 - ☁️ Alibaba Cloud FunASR recognition results are retrieved via a secondary HTTP request (`transcription_url`)
+- 🖥️ Local SenseVoice automatically downloads the model from ModelScope on first run (~500MB); requires `pip install funasr modelscope torch torchaudio`
 - 🌐 When using Upstash cache, processed video results are shared across instances within TTL, avoiding redundant ASR/LLM resource consumption

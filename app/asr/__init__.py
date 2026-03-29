@@ -6,6 +6,12 @@ from app.asr.volcengine import VolcengineASR
 def get_asr_provider(config) -> ASRProvider:
     if config.asr_provider == "aliyun":
         return AliyunASR(config.aliyun_dashscope_api_key)
+    if config.asr_provider == "local_sensevoice":
+        from app.asr.local_sensevoice import LocalSenseVoiceASR
+        return LocalSenseVoiceASR(
+            device=config.local_asr_device,
+            language=config.local_asr_language,
+        )
     return VolcengineASR(
         config.volcengine_app_id,
         config.volcengine_access_token,
