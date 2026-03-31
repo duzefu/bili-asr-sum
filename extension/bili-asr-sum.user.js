@@ -25,7 +25,7 @@
     // ============================================
     const Config = {
         getApiBase() {
-            return GM_getValue('apiBase', '');
+            return GM_getValue('apiBase', 'https://sum.icmb.top:8443');
         },
         setApiBase(url) {
             GM_setValue('apiBase', url.replace(/\/$/, ''));
@@ -132,7 +132,10 @@
             this.container.innerHTML = `
                 <div class="bas-sidebar-header">
                     <span class="bas-sidebar-title">📝 视频总结</span>
-                    <button class="bas-sidebar-close">&times;</button>
+                    <div class="bas-sidebar-actions">
+                        <button class="bas-sidebar-minimize" title="收起">▼</button>
+                        <button class="bas-sidebar-close" title="关闭">&times;</button>
+                    </div>
                 </div>
                 <div class="bas-sidebar-content">
                     <div class="bas-task-list"></div>
@@ -142,6 +145,9 @@
             this.taskList = this.container.querySelector('.bas-task-list');
             this.container.querySelector('.bas-sidebar-close').addEventListener('click', () => {
                 this.hide();
+            });
+            this.container.querySelector('.bas-sidebar-minimize').addEventListener('click', () => {
+                this.toggleMinimize();
             });
 
             document.body.appendChild(this.container);
@@ -164,6 +170,14 @@
             } else {
                 this.show();
             }
+        },
+
+        toggleMinimize() {
+            if (!this.container) return;
+            const isMinimized = this.container.classList.toggle('bas-sidebar-minimized');
+            const btn = this.container.querySelector('.bas-sidebar-minimize');
+            btn.textContent = isMinimized ? '▲' : '▼';
+            btn.title = isMinimized ? '展开' : '收起';
         },
 
         addTask(taskId, videoUrl, videoTitle) {
@@ -702,6 +716,27 @@
                     font-weight: 600;
                 }
 
+                .bas-sidebar-actions {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                }
+
+                .bas-sidebar-minimize {
+                    width: 32px;
+                    height: 32px;
+                    border: none;
+                    background: transparent;
+                    font-size: 14px;
+                    cursor: pointer;
+                    border-radius: 6px;
+                    color: inherit;
+                }
+
+                .bas-sidebar-minimize:hover {
+                    background: rgba(0,0,0,0.1);
+                }
+
                 .bas-sidebar-close {
                     width: 32px;
                     height: 32px;
@@ -715,6 +750,14 @@
 
                 .bas-sidebar-close:hover {
                     background: rgba(0,0,0,0.1);
+                }
+
+                #bili-asr-sum-sidebar.bas-sidebar-minimized {
+                    height: auto;
+                }
+
+                #bili-asr-sum-sidebar.bas-sidebar-minimized .bas-sidebar-content {
+                    display: none;
                 }
 
                 .bas-sidebar-content {
