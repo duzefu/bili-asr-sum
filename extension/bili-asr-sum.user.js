@@ -8,6 +8,7 @@
 // @match        *://youtube.com/*
 // @match        *://www.bilibili.com/*
 // @match        *://bilibili.com/*
+// @match        *://search.bilibili.com/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -130,15 +131,15 @@
             this.container = document.createElement('div');
             this.container.id = 'bili-asr-sum-sidebar';
             this.container.innerHTML = `
-                <div class="bas-sidebar-header">
-                    <span class="bas-sidebar-title">📝 视频总结</span>
-                    <div class="bas-sidebar-actions">
-                        <button class="bas-sidebar-minimize" title="收起">▼</button>
+                <button class="bas-sidebar-toggle" title="收起">◀</button>
+                <div class="bas-sidebar-inner">
+                    <div class="bas-sidebar-header">
+                        <span class="bas-sidebar-title">📝 视频总结</span>
                         <button class="bas-sidebar-close" title="关闭">&times;</button>
                     </div>
-                </div>
-                <div class="bas-sidebar-content">
-                    <div class="bas-task-list"></div>
+                    <div class="bas-sidebar-content">
+                        <div class="bas-task-list"></div>
+                    </div>
                 </div>
             `;
 
@@ -146,7 +147,7 @@
             this.container.querySelector('.bas-sidebar-close').addEventListener('click', () => {
                 this.hide();
             });
-            this.container.querySelector('.bas-sidebar-minimize').addEventListener('click', () => {
+            this.container.querySelector('.bas-sidebar-toggle').addEventListener('click', () => {
                 this.toggleMinimize();
             });
 
@@ -175,8 +176,8 @@
         toggleMinimize() {
             if (!this.container) return;
             const isMinimized = this.container.classList.toggle('bas-sidebar-minimized');
-            const btn = this.container.querySelector('.bas-sidebar-minimize');
-            btn.textContent = isMinimized ? '▲' : '▼';
+            const btn = this.container.querySelector('.bas-sidebar-toggle');
+            btn.textContent = isMinimized ? '▶' : '◀';
             btn.title = isMinimized ? '展开' : '收起';
         },
 
@@ -335,7 +336,7 @@
 
         scanAndInject(root = document.body) {
             const YT_SELECTOR = 'ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer';
-            const BILI_SELECTOR = '.bili-video-card, .bili-video-card-recommend, .feed-card, .recommend-list__item';
+            const BILI_SELECTOR = '.bili-video-card, .bili-video-card-recommend, .feed-card, .recommend-list__item, .video-list-item, .search-all-list .item';
 
             // root 本身可能就是视频卡片（滚动加载时 MutationObserver 直接传入卡片节点）
             if (root.matches) {
@@ -603,6 +604,8 @@
                 .feed-card__cover:hover .bas-btn-container,
                 .recommend-list__item:hover .bas-btn-container,
                 .recommend-list__item-link:hover .bas-btn-container,
+                .video-list-item:hover .bas-btn-container,
+                .search-all-list .item:hover .bas-btn-container,
                 /* YouTube hover - 普通 DOM 情况（非 shadow DOM 挂载） */
                 ytd-rich-item-renderer:hover .bas-btn-container,
                 ytd-video-renderer:hover .bas-btn-container,
@@ -669,19 +672,78 @@
                     position: fixed;
                     top: 0;
                     right: -420px;
-                    width: 400px;
+                    width: 420px;
                     height: 100vh;
                     background: #fff;
                     box-shadow: -4px 0 20px rgba(0,0,0,0.15);
                     z-index: 999999;
                     transition: right 0.3s ease;
                     display: flex;
-                    flex-direction: column;
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 }
 
                 #bili-asr-sum-sidebar.bas-sidebar-visible {
                     right: 0;
+                }
+
+                /* 左侧收起/展开按钮 */
+                .bas-sidebar-toggle {
+                    position: absolute;
+                    left: -20px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    width: 20px;
+                    height: 60px;
+                    border: none;
+                    background: #fff;
+                    cursor: pointer;
+                    border-radius: 6px 0 0 6px;
+                    font-size: 12px;
+                    color: #666;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+                    z-index: 10;
+                }
+
+                .bas-sidebar-toggle:hover {
+                    background: #f5f5f5;
+                    color: #333;
+                }
+
+                html[dark] .bas-sidebar-toggle,
+                [data-dark-mode="true"] .bas-sidebar-toggle {
+                    background: #2a2a2a;
+                    color: #aaa;
+                }
+
+                html[dark] .bas-sidebar-toggle:hover,
+                [data-dark-mode="true"] .bas-sidebar-toggle:hover {
+                    background: #333;
+                    color: #fff;
+                }
+
+                /* 收起状态 */
+                #bili-asr-sum-sidebar.bas-sidebar-minimized {
+                    right: -400px;
+                }
+
+                #bili-asr-sum-sidebar.bas-sidebar-minimized .bas-sidebar-toggle {
+                    left: -20px;
+                    box-shadow: -2px 0 8px rgba(0,0,0,0.15);
+                }
+
+                #bili-asr-sum-sidebar.bas-sidebar-minimized .bas-sidebar-inner {
+                    display: none;
+                }
+
+                /* 侧边栏内部容器 */
+                .bas-sidebar-inner {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    overflow: hidden;
                 }
 
                 /* YouTube 深色模式适配 */
@@ -716,27 +778,6 @@
                     font-weight: 600;
                 }
 
-                .bas-sidebar-actions {
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
-                }
-
-                .bas-sidebar-minimize {
-                    width: 32px;
-                    height: 32px;
-                    border: none;
-                    background: transparent;
-                    font-size: 14px;
-                    cursor: pointer;
-                    border-radius: 6px;
-                    color: inherit;
-                }
-
-                .bas-sidebar-minimize:hover {
-                    background: rgba(0,0,0,0.1);
-                }
-
                 .bas-sidebar-close {
                     width: 32px;
                     height: 32px;
@@ -750,14 +791,6 @@
 
                 .bas-sidebar-close:hover {
                     background: rgba(0,0,0,0.1);
-                }
-
-                #bili-asr-sum-sidebar.bas-sidebar-minimized {
-                    height: auto;
-                }
-
-                #bili-asr-sum-sidebar.bas-sidebar-minimized .bas-sidebar-content {
-                    display: none;
                 }
 
                 .bas-sidebar-content {
