@@ -2,12 +2,12 @@ import logging
 from datetime import datetime, timezone
 
 import app.cache as cache_module
+import app.asr as asr_module
 from app.cache import CachedContent
 from app.config import settings
 from app.downloader import cleanup_task_files, download_audio, download_subtitles
 from app.summarizer import summarize
 from app.task_manager import task_manager
-from app.asr import get_asr_provider
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +58,7 @@ async def run_pipeline(task_id: str, url: str) -> None:
             audio_path, title = await download_audio(url, settings.temp_dir, task_id)
             await task_manager.update(task_id, status="transcribing", title=title)
 
-            asr_provider = get_asr_provider(settings)
-            transcript = await asr_provider.transcribe(audio_path)
+            transcript = await asr_module.asr_provider.transcribe(audio_path)
             transcript_source = "asr"
             await task_manager.update(task_id, transcript_source=transcript_source)
 
