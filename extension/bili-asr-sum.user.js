@@ -351,7 +351,7 @@
 
         scanAndInject(root = document.body) {
             const YT_SELECTOR = 'ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer';
-            const BILI_SELECTOR = '.bili-video-card, .bili-video-card-recommend, .feed-card, .recommend-list__item, .video-list-item, .search-all-list .item';
+            const BILI_SELECTOR = '.bili-video-card, .bili-video-card-recommend, .feed-card, .recommend-list__item, .video-list-item, .search-all-list .item, .video-card, .rank-item';
 
             // root 本身可能就是视频卡片（滚动加载时 MutationObserver 直接传入卡片节点）
             if (root.matches) {
@@ -510,7 +510,7 @@
             const btn = this.createButton(videoUrl, 'bilibili');
 
             // 查找缩略图容器用于定位参考
-            const thumbnail = card.querySelector('.bili-video-card__cover, .bili-video-card__image, .feed-card__cover, .recommend-list__item-link, a[href*="video/"]');
+            const thumbnail = card.querySelector('.bili-video-card__cover, .bili-video-card__image, .feed-card__cover, .recommend-list__item-link, .video-card__content, a[href*="video/"]');
 
             // 直接在卡片上添加按钮容器（避免影响缩略图内部布局）
             // 卡片通常已经有 position: relative 或类似定位
@@ -621,6 +621,8 @@
                 .recommend-list__item-link:hover .bas-btn-container,
                 .video-list-item:hover .bas-btn-container,
                 .search-all-list .item:hover .bas-btn-container,
+                .video-card:hover .bas-btn-container,
+                .rank-item:hover .bas-btn-container,
                 /* YouTube hover - 普通 DOM 情况（非 shadow DOM 挂载） */
                 ytd-rich-item-renderer:hover .bas-btn-container,
                 ytd-video-renderer:hover .bas-btn-container,
