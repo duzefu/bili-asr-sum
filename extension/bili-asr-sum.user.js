@@ -386,109 +386,30 @@
         injectYouTube(card) {
             if (this.processedCards.has(card)) return;
 
-            // 先标记，避免重复处理（即便此次没找到链接，下次 mutation 会重试）
-            // 注意：只有成功注入后才加入 processedCards
+            // 在标题末尾注入按钮，避免 shadow DOM 问题
+            // 兼容旧版（a#video-title-link / a#video-title）和新版 lockup 架构
+            const titleLink = card.querySelector(
+                'a#video-title-link, a#video-title, ' +
+                '.yt-lockup-metadata-view-model__title a, ' +
+                'h3 a[href*="watch?v="]'
+            );
+            if (!titleLink) return;
 
-            // 查找缩略图容器，并从中获取视频链接
-            // 优先检测新版 View Model 架构（yt-lockup-view-model），其缩略图 <a> 在普通 DOM 中
-            const viewModelLink = card.querySelector('a.yt-lockup-view-model__content-image');
-            // 旧版架构使用 ytd-thumbnail（shadow DOM）
-            const ytdThumbnail = viewModelLink ? null : card.querySelector('ytd-thumbnail');
-            let mountPoint = viewModelLink || ytdThumbnail || card;
-            let videoUrl = null;
-
-            if (viewModelLink) {
-                // 新版架构：<a> 直接在普通 DOM 中，href 可直接读取
-                if (viewModelLink.href && viewModelLink.href.includes('watch?v=')) {
-                    videoUrl = viewModelLink.href;
-                }
-            } else if (ytdThumbnail && ytdThumbnail.shadowRoot) {
-                const innerLink = ytdThumbnail.shadowRoot.querySelector('a');
-                if (innerLink) {
-                    mountPoint = innerLink;
-                    // 直接从缩略图的 <a> 取 URL，避免跨卡片污染
-                    if (innerLink.href && innerLink.href.includes('watch?v=')) {
-                        videoUrl = innerLink.href;
-                    }
-                } else {
-                    mountPoint = ytdThumbnail.shadowRoot.firstElementChild || ytdThumbnail;
-                }
-            }
-
-            // 兜底：从普通 DOM 查找
-            if (!videoUrl) {
-                const directLinks = card.querySelectorAll('a[href*="watch?v="]');
-                if (directLinks.length > 0) videoUrl = directLinks[0].href;
-            }
-
-            // 再兜底：穿透 shadow DOM 查找
-            if (!videoUrl) {
-                const shadowLink = this.deepQuerySelector(card, 'a[href*="watch?v="]');
-                if (shadowLink) videoUrl = shadowLink.href;
-            }
-
-            if (!videoUrl) return;
+            const videoUrl = titleLink.href;
+            if (!videoUrl || !videoUrl.includes('watch?v=')) return;
 
             // 已有按钮则跳过
-            if (mountPoint.querySelector && mountPoint.querySelector('.bas-btn-container')) {
+            if (card.querySelector('.bas-yt-title-btn')) {
                 this.processedCards.add(card);
                 return;
             }
 
-            mountPoint.style.position = 'relative';
+            const btn = this.createButton(videoUrl, 'youtube');
+            btn.classList.add('bas-yt-title-btn');
 
-            const btnContainer = document.createElement('div');
-            btnContainer.className = 'bas-btn-container bas-yt-btn-container';
-            btnContainer.appendChild(this.createButton(videoUrl, 'youtube'));
-            mountPoint.appendChild(btnContainer);
-
-            // 为 hover 显示注入内联样式（不依赖外部 CSS 穿透 shadow DOM）
-            // 新版 View Model 架构在普通 DOM 中，全局 CSS 已覆盖，无需注入 shadow 样式
-            if (!viewModelLink && ytdThumbnail && ytdThumbnail.shadowRoot) {
-                const shadowStyle = document.createElement('style');
-                shadowStyle.textContent = `
-                    .bas-btn-container {
-                        position: absolute !important;
-                        top: 8px !important;
-                        right: 8px !important;
-                        z-index: 999 !important;
-                        opacity: 0;
-                        transition: opacity 0.2s;
-                        width: 32px !important;
-                        height: 32px !important;
-                        display: block !important;
-                        overflow: visible !important;
-                    }
-                    :host(:hover) .bas-btn-container,
-                    a:hover .bas-btn-container,
-                    .bas-btn-container:hover {
-                        opacity: 1;
-                    }
-                    .bas-summarize-btn {
-                        display: flex !important;
-                        align-items: center;
-                        justify-content: center;
-                        width: 32px !important;
-                        height: 32px !important;
-                        border: none;
-                        border-radius: 6px;
-                        cursor: pointer;
-                        font-size: 16px;
-                        transition: all 0.2s;
-                        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                        pointer-events: auto;
-                        background: rgba(0,0,0,0.7);
-                        color: white;
-                        margin: 0 !important;
-                        padding: 0 !important;
-                    }
-                    .bas-summarize-btn:hover:not(:disabled) {
-                        transform: scale(1.1);
-                        background: rgba(204,0,0,0.9);
-                    }
-                `;
-                ytdThumbnail.shadowRoot.appendChild(shadowStyle);
-            }
+            // 找到标题的父容器，将按钮插入其中（与标题同行）
+            const titleParent = titleLink.closest('h3') || titleLink.parentElement;
+            titleParent.appendChild(btn);
 
             this.processedCards.add(card);
         },
@@ -594,7 +515,7 @@
         inject() {
             const style = document.createElement('style');
             style.textContent = `
-                /* 按钮容器 - 完全脱离文档流，不影响布局 */
+                /* Bilibili 按钮容器 - 绝对定位叠在缩略图上 */
                 .bas-btn-container {
                     position: absolute !important;
                     top: 8px !important;
@@ -602,7 +523,6 @@
                     z-index: 999 !important;
                     opacity: 0;
                     transition: opacity 0.2s;
-                    /* 不设置 pointer-events: none，让按钮可点击 */
                     margin: 0 !important;
                     padding: 0 !important;
                     width: 32px !important;
@@ -614,29 +534,17 @@
 
                 /* Bilibili hover */
                 .bili-video-card:hover .bas-btn-container,
-                .bili-video-card__cover:hover .bas-btn-container,
                 .feed-card:hover .bas-btn-container,
-                .feed-card__cover:hover .bas-btn-container,
                 .recommend-list__item:hover .bas-btn-container,
-                .recommend-list__item-link:hover .bas-btn-container,
                 .video-list-item:hover .bas-btn-container,
                 .search-all-list .item:hover .bas-btn-container,
                 .video-card:hover .bas-btn-container,
                 .rank-item:hover .bas-btn-container,
-                /* YouTube hover - 普通 DOM 情况（非 shadow DOM 挂载） */
-                ytd-rich-item-renderer:hover .bas-btn-container,
-                ytd-video-renderer:hover .bas-btn-container,
-                ytd-grid-video-renderer:hover .bas-btn-container,
-                ytd-compact-video-renderer:hover .bas-btn-container,
-                /* 父元素 hover 显示按钮 */
-                [style*="position: relative"]:hover > .bas-btn-container,
-                a:hover > .bas-btn-container,
-                /* 直接 hover 按钮容器或按钮本身 */
                 .bas-btn-container:hover {
                     opacity: 1;
                 }
 
-                /* 总结按钮通用样式 */
+                /* 总结按钮通用样式（Bilibili 缩略图悬浮按钮） */
                 .bas-summarize-btn {
                     display: flex !important;
                     align-items: center;
@@ -663,7 +571,48 @@
                     cursor: wait;
                 }
 
-                /* YouTube 按钮样式 */
+                /* YouTube 标题行内按钮 */
+                .bas-yt-title-btn {
+                    display: inline-flex !important;
+                    align-items: center;
+                    justify-content: center;
+                    width: 22px !important;
+                    height: 22px !important;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 13px;
+                    background: transparent;
+                    color: #606060;
+                    margin-left: 6px !important;
+                    padding: 0 !important;
+                    vertical-align: middle;
+                    flex-shrink: 0;
+                    box-shadow: none;
+                    opacity: 0.5;
+                    transition: opacity 0.15s, background 0.15s;
+                    position: static !important;
+                }
+
+                h3:hover .bas-yt-title-btn,
+                .bas-yt-title-btn:hover {
+                    opacity: 1;
+                    background: rgba(0, 0, 0, 0.08);
+                }
+
+                html[dark] .bas-yt-title-btn,
+                ytd-app[is-dark-theme] .bas-yt-title-btn {
+                    color: #aaa;
+                }
+
+                html[dark] h3:hover .bas-yt-title-btn,
+                ytd-app[is-dark-theme] h3:hover .bas-yt-title-btn,
+                html[dark] .bas-yt-title-btn:hover,
+                ytd-app[is-dark-theme] .bas-yt-title-btn:hover {
+                    background: rgba(255, 255, 255, 0.1);
+                }
+
+                /* YouTube 按钮（Bilibili 缩略图覆盖样式，非 title 模式） */
                 .bas-btn-youtube {
                     background: rgba(0, 0, 0, 0.7);
                     color: white;
