@@ -131,7 +131,7 @@
             this.container = document.createElement('div');
             this.container.id = 'bili-asr-sum-sidebar';
             this.container.innerHTML = `
-                <button class="bas-sidebar-toggle" title="收起">◀</button>
+                <button class="bas-sidebar-toggle" title="收起">▶</button>
                 <div class="bas-sidebar-inner">
                     <div class="bas-sidebar-header">
                         <span class="bas-sidebar-title">📝 视频总结</span>
@@ -162,6 +162,13 @@
         hide() {
             if (this.container) {
                 this.container.classList.remove('bas-sidebar-visible');
+                // 同步清除收起状态，避免下次展开时状态残留
+                this.container.classList.remove('bas-sidebar-minimized');
+                const btn = this.container.querySelector('.bas-sidebar-toggle');
+                if (btn) {
+                    btn.textContent = '▶';
+                    btn.title = '收起';
+                }
             }
         },
 
@@ -175,9 +182,17 @@
 
         toggleMinimize() {
             if (!this.container) return;
+            // 若侧边栏不可见（已关闭），点击 toggle 应直接展开而非空转
+            if (!this.container.classList.contains('bas-sidebar-visible')) {
+                this.container.classList.remove('bas-sidebar-minimized');
+                this.show();
+                const btn = this.container.querySelector('.bas-sidebar-toggle');
+                if (btn) { btn.textContent = '▶'; btn.title = '收起'; }
+                return;
+            }
             const isMinimized = this.container.classList.toggle('bas-sidebar-minimized');
             const btn = this.container.querySelector('.bas-sidebar-toggle');
-            btn.textContent = isMinimized ? '▶' : '◀';
+            btn.textContent = isMinimized ? '◀' : '▶';
             btn.title = isMinimized ? '展开' : '收起';
         },
 
