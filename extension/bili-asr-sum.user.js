@@ -124,6 +124,8 @@
         container: null,
         taskList: null,
         tasks: new Map(), // taskId -> taskData
+        autoCollapseTimer: null,
+        isHovered: false,
 
         init() {
             if (this.container) return;
@@ -131,7 +133,7 @@
             this.container = document.createElement('div');
             this.container.id = 'bili-asr-sum-sidebar';
             this.container.innerHTML = `
-                <button class="bas-sidebar-toggle" title="收起">▶</button>
+                <button class="bas-sidebar-toggle" title="展开总结栏">◀</button>
                 <div class="bas-sidebar-inner">
                     <div class="bas-sidebar-header">
                         <span class="bas-sidebar-title">📝 视频总结</span>
@@ -148,7 +150,20 @@
                 this.hide();
             });
             this.container.querySelector('.bas-sidebar-toggle').addEventListener('click', () => {
-                this.toggleMinimize();
+                this.toggle();
+            });
+
+            // 鼠标进入时展开（有任务才展开），离开时自动收起
+            this.container.addEventListener('mouseenter', () => {
+                this.isHovered = true;
+                clearTimeout(this.autoCollapseTimer);
+                if (this.tasks.size > 0) {
+                    this.show();
+                }
+            });
+            this.container.addEventListener('mouseleave', () => {
+                this.isHovered = false;
+                this.scheduleCollapse(500);
             });
 
             document.body.appendChild(this.container);
@@ -162,13 +177,6 @@
         hide() {
             if (this.container) {
                 this.container.classList.remove('bas-sidebar-visible');
-                // 同步清除收起状态，避免下次展开时状态残留
-                this.container.classList.remove('bas-sidebar-minimized');
-                const btn = this.container.querySelector('.bas-sidebar-toggle');
-                if (btn) {
-                    btn.textContent = '▶';
-                    btn.title = '收起';
-                }
             }
         },
 
@@ -180,24 +188,18 @@
             }
         },
 
-        toggleMinimize() {
-            if (!this.container) return;
-            // 若侧边栏不可见（已关闭），点击 toggle 应直接展开而非空转
-            if (!this.container.classList.contains('bas-sidebar-visible')) {
-                this.container.classList.remove('bas-sidebar-minimized');
-                this.show();
-                const btn = this.container.querySelector('.bas-sidebar-toggle');
-                if (btn) { btn.textContent = '▶'; btn.title = '收起'; }
-                return;
-            }
-            const isMinimized = this.container.classList.toggle('bas-sidebar-minimized');
-            const btn = this.container.querySelector('.bas-sidebar-toggle');
-            btn.textContent = isMinimized ? '◀' : '▶';
-            btn.title = isMinimized ? '展开' : '收起';
+        scheduleCollapse(delay) {
+            clearTimeout(this.autoCollapseTimer);
+            this.autoCollapseTimer = setTimeout(() => {
+                if (!this.isHovered) {
+                    this.hide();
+                }
+            }, delay);
         },
 
         addTask(taskId, videoUrl, videoTitle) {
             this.show();
+            this.scheduleCollapse(2000); // 2秒后自动收起
             
             const taskEl = document.createElement('div');
             taskEl.className = 'bas-task-card';
@@ -652,29 +654,36 @@
                     right: 0;
                 }
 
-                /* 左侧收起/展开按钮 */
+                /* 左侧展开触发 tab */
                 .bas-sidebar-toggle {
                     position: absolute;
-                    left: -20px;
+                    left: -24px;
                     top: 50%;
                     transform: translateY(-50%);
-                    width: 20px;
-                    height: 60px;
+                    width: 24px;
+                    height: 72px;
                     border: none;
                     background: #fff;
                     cursor: pointer;
-                    border-radius: 6px 0 0 6px;
+                    border-radius: 8px 0 0 8px;
                     font-size: 12px;
                     color: #666;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+                    box-shadow: -3px 0 10px rgba(0,0,0,0.15);
                     z-index: 10;
+                    transition: background 0.2s, color 0.2s;
+                }
+
+                /* 侧边栏隐藏时 tab 依然可见（始终在 DOM 中） */
+                #bili-asr-sum-sidebar:not(.bas-sidebar-visible) .bas-sidebar-toggle {
+                    background: rgba(255,255,255,0.95);
+                    box-shadow: -3px 0 12px rgba(0,0,0,0.2);
                 }
 
                 .bas-sidebar-toggle:hover {
-                    background: #f5f5f5;
+                    background: #f0f0f0;
                     color: #333;
                 }
 
@@ -684,24 +693,15 @@
                     color: #aaa;
                 }
 
+                html[dark] #bili-asr-sum-sidebar:not(.bas-sidebar-visible) .bas-sidebar-toggle,
+                [data-dark-mode="true"] #bili-asr-sum-sidebar:not(.bas-sidebar-visible) .bas-sidebar-toggle {
+                    background: rgba(42,42,42,0.95);
+                }
+
                 html[dark] .bas-sidebar-toggle:hover,
                 [data-dark-mode="true"] .bas-sidebar-toggle:hover {
                     background: #333;
                     color: #fff;
-                }
-
-                /* 收起状态 */
-                #bili-asr-sum-sidebar.bas-sidebar-minimized {
-                    right: -400px;
-                }
-
-                #bili-asr-sum-sidebar.bas-sidebar-minimized .bas-sidebar-toggle {
-                    left: -20px;
-                    box-shadow: -2px 0 8px rgba(0,0,0,0.15);
-                }
-
-                #bili-asr-sum-sidebar.bas-sidebar-minimized .bas-sidebar-inner {
-                    display: none;
                 }
 
                 /* 侧边栏内部容器 */
