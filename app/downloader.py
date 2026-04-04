@@ -1,6 +1,9 @@
 import asyncio
+import logging
 import re
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 async def _run_yt_dlp(*args: str) -> tuple[int, str, str]:
@@ -12,6 +15,31 @@ async def _run_yt_dlp(*args: str) -> tuple[int, str, str]:
     )
     stdout, stderr = await proc.communicate()
     return proc.returncode, stdout.decode(errors="replace"), stderr.decode(errors="replace")
+
+
+async def _run_yt_dlp_with_retry(
+    *args: str,
+    retries: int = 3,
+    backoff: float = 2.0,
+) -> tuple[int, str, str]:
+    """
+    带重试的 yt-dlp 调用。
+    returncode != 0 时进行指数退避重试，最多重试 `retries` 次。
+    全部重试耗尽后返回最后一次的结果，由调用方决定如何处理。
+    退避等待时间：backoff * 2^attempt 秒（attempt 从 0 开始）。
+    """
+    rc, stdout, stderr = await _run_yt_dlp(*args)
+    for attempt in range(retries):
+        if rc == 0:
+            break
+        wait = backoff * (2 ** attempt)
+        logger.warning(
+            "yt-dlp 调用失败（第 %d/%d 次重试，%.1fs 后重试）: %s",
+            attempt + 1, retries, wait, stderr[-300:].strip(),
+        )
+        await asyncio.sleep(wait)
+        rc, stdout, stderr = await _run_yt_dlp(*args)
+    return rc, stdout, stderr
 
 
 def _parse_vtt(content: str) -> str:
@@ -57,12 +85,12 @@ async def download_subtitles(url: str, output_dir: Path, task_id: str) -> tuple[
     output_template = str(output_dir / f"{task_id}_sub")
 
     # 先获取视频标题
-    rc, stdout, _ = await _run_yt_dlp("--get-title", "--no-playlist", url)
+    rc, stdout, _ = await _run_yt_dlp_with_retry("--get-title", "--no-playlist", url)
     title = stdout.strip().splitlines()[0] if rc == 0 and stdout.strip() else "未知标题"
 
     # 尝试下载自动字幕
     for lang in ["zh-Hans", "zh", "en"]:
-        rc, _, _ = await _run_yt_dlp(
+        rc, _, _ = await _run_yt_dlp_with_retry(
             "--write-auto-sub",
             "--write-sub",
             "--sub-lang", lang,
@@ -98,10 +126,10 @@ async def download_audio(url: str, output_dir: Path, task_id: str) -> tuple[Path
     output_template = str(output_dir / f"{task_id}.%(ext)s")
 
     # 先获取标题
-    rc, stdout, _ = await _run_yt_dlp("--get-title", "--no-playlist", url)
+    rc, stdout, _ = await _run_yt_dlp_with_retry("--get-title", "--no-playlist", url)
     title = stdout.strip().splitlines()[0] if rc == 0 and stdout.strip() else "未知标题"
 
-    rc, stdout, stderr = await _run_yt_dlp(
+    rc, stdout, stderr = await _run_yt_dlp_with_retry(
         "--extract-audio",
         "--audio-format", "mp3",
         "--audio-quality", "5",
