@@ -43,7 +43,7 @@ def _build_user_message(title: str, transcript: str, sentence_count: int) -> str
         "\n"
         "请按以下模板输出：\n"
         "\n"
-        "## TL;DR\n"
+        "## 一句话总结\n"
         "（一句话，20 字以内，概括视频绝对核心）\n"
         "\n"
         "## Summary\n"
